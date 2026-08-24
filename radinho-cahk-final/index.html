@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Radinho do CAHK</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:#0a0a0b; color:#f7f7f7; overflow-x:hidden; }
+    .formula { position:fixed; inset:0; pointer-events:none; opacity:.08; font-family:Georgia,serif; font-size:28px; line-height:2.3; padding:20px; transform:rotate(-4deg) scale(1.1); }
+    .shell { position:relative; max-width:860px; margin:auto; padding:28px 18px 56px; }
+    .brand { text-align:center; margin:18px 0 26px; }
+    .brand h1 { font-size:clamp(34px,8vw,68px); margin:0; letter-spacing:-.04em; }
+    .brand p { margin:8px 0; color:#b8b8bd; }
+    .card { background:rgba(22,22,25,.92); border:1px solid #303036; border-radius:22px; padding:18px; margin:14px 0; box-shadow:0 20px 50px rgba(0,0,0,.22); }
+    .row { display:flex; gap:10px; }
+    input, button { font:inherit; }
+    input { width:100%; padding:15px 16px; border-radius:14px; border:1px solid #3b3b42; background:#111114; color:white; }
+    button { border:0; border-radius:14px; padding:14px 18px; font-weight:700; cursor:pointer; }
+    .primary { background:#fff; color:#111; }
+    .muted { color:#a4a4ab; font-size:14px; }
+    .now { display:flex; gap:14px; align-items:center; }
+    .thumb { width:120px; aspect-ratio:16/9; object-fit:cover; border-radius:12px; background:#222; }
+    .queue-item { display:grid; grid-template-columns:72px 1fr auto; gap:12px; align-items:center; padding:12px 0; border-bottom:1px solid #2b2b31; }
+    .queue-item:last-child { border-bottom:0; }
+    .queue-item img { width:72px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; }
+    .status { min-height:20px; margin-top:10px; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:#24242a; font-size:12px; color:#cfcfd4; }
+    @media(max-width:600px){ .row{flex-direction:column;} .thumb{width:96px;} }
+  </style>
+</head>
+<body>
+  <div class="formula">E = mc² &nbsp;&nbsp; F = ma &nbsp;&nbsp; ∇·E = ρ/ε₀ &nbsp;&nbsp; ΔxΔp ≥ ħ/2 &nbsp;&nbsp; E = hf &nbsp;&nbsp; v = λf<br>∮B·dl = μ₀I &nbsp;&nbsp; p = mv &nbsp;&nbsp; U = ½kx² &nbsp;&nbsp; ω = 2πf &nbsp;&nbsp; P = W/Δt</div>
+  <main class="shell">
+    <div class="brand"><div class="pill">FÍSICA UFPR</div><h1>RADINHO DO CAHK</h1><p>Escolha a próxima música da sala.</p></div>
+    <section class="card"><h2>Adicionar música</h2><div class="row"><input id="youtubeUrl" placeholder="Cole um link do YouTube..." /><button class="primary" id="addBtn">Adicionar à fila</button></div><div id="status" class="status muted"></div><p class="muted">A busca pelo nome da música será ativada quando a chave da YouTube Data API estiver configurada.</p></section>
+    <section class="card"><h2>Tocando agora</h2><div id="now"></div></section>
+    <section class="card"><h2>Fila</h2><div id="queue"></div></section>
+  </main>
+<script>
+const SUPABASE_URL = "https://jcxzlbhwkhtxsabcewuk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_bRJFBGZdq1pOVpej6ZS7mw_9v24g69Y";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+async function loadQueue(){
+  const { data, error } = await sb.from("queue").select("*").in("status", ["playing","queued"]).order("position",{ascending:true});
+  if(error) return;
+  const playing = data.find(x=>x.status==="playing"); const queued = data.filter(x=>x.status==="queued");
+  document.querySelector("#now").innerHTML = playing ? `<div class="now"><img class="thumb" src="${esc(playing.thumbnail)}"><div><strong>${esc(playing.title)}</strong><div class="muted">${esc(playing.channel)}</div></div></div>` : `<div class="muted">Nada tocando agora.</div>`;
+  document.querySelector("#queue").innerHTML = queued.length ? queued.map((x,i)=>`<div class="queue-item"><img src="${esc(x.thumbnail)}"><div><strong>${i+1}. ${esc(x.title)}</strong><div class="muted">${esc(x.channel)}</div></div><span class="pill">na fila</span></div>`).join("") : `<div class="muted">A fila está vazia.</div>`;
+}
+document.querySelector("#addBtn").addEventListener("click", async ()=>{
+  const url = document.querySelector("#youtubeUrl").value.trim(); const status = document.querySelector("#status");
+  if(!url){ status.textContent = "Cole um link do YouTube."; return; }
+  status.textContent = "Adicionando...";
+  try { const r = await fetch(`${SUPABASE_URL}/functions/v1/queue-add`, {method:"POST",headers:{"Content-Type":"application/json","apikey":SUPABASE_KEY},body:JSON.stringify({url})}); const j=await r.json(); if(!r.ok) throw new Error(j.error||"Não foi possível adicionar."); document.querySelector("#youtubeUrl").value=""; status.textContent="Música adicionada à fila."; await loadQueue(); } catch(e){ status.textContent=e.message; }
+});
+sb.channel("queue-changes").on("postgres_changes",{event:"*",schema:"public",table:"queue"},()=>loadQueue()).subscribe();
+loadQueue();
+</script>
+</body></html>
