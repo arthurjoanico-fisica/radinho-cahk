@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "radinho-cahk",
-  "compatibility_date": "2026-09-10",
-  "assets": { "directory": "./public" }
+  "name": "caixaflex-2",
+  "compatibility_date": "2026-08-25",
+  "assets": {
+    "directory": "./public"
+  }
 }

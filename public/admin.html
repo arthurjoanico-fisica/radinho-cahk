@@ -1,3 +1,152 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rádio CAHK — Programação</title><link rel="stylesheet" href="/styles.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script></head><body><main class="shell admin"><header class="hero"><span class="pill">ADMINISTRAÇÃO</span><h1>PROGRAMAÇÃO</h1><p>Controle o que a Rádio CAHK fala e como ela preenche os intervalos.</p></header><section id="login" class="card login-card"><h2>Acesso administrativo</h2><div class="stack"><input id="token" type="password" placeholder="Código administrativo"><button id="enter" class="primary">Entrar</button><div id="loginMsg" class="muted"></div></div></section><div id="panel" class="hidden"><div class="admin-grid"><section class="card"><h2>Configuração da rádio</h2><form id="cfg" class="form-grid"><label class="span2">Nome<input id="stationName"></label><label class="check span2"><input id="autoMode" type="checkbox">Programação automática</label><label class="check span2"><input id="annsEnabled" type="checkbox">Locuções automáticas</label><label>Locução a cada<input id="every" type="number" min="1" max="20"></label><label>faixas<input value="músicas" disabled></label><label>Velocidade da voz<input id="rate" type="number" min=".5" max="2" step=".05"></label><label>Tom da voz<input id="pitch" type="number" min=".5" max="2" step=".05"></label><label class="span2">Voz preferida<select id="voice"><option value="">Automática</option></select></label><button class="primary span2">Salvar configuração</button></form><hr style="border-color:#2d333c;margin:18px 0"><button id="refresh" class="ghost full">Atualizar Top Música do YouTube</button><div id="refreshMsg" class="status muted small"></div><div id="trackMetric"></div></section><section class="card"><h2>Nova locução</h2><form id="annForm" class="form-grid"><input id="annId" type="hidden"><label class="span2">Nome interno<input id="annTitle" placeholder="Ex.: Coca gelada"></label><label>Tipo<select id="annType"><option value="station">Vinheta</option><option value="product">Produto</option><option value="event">Evento</option><option value="custom">Outro</option></select></label><label>Prioridade<input id="annPriority" type="number" value="0"></label><label class="span2">Texto<textarea id="annText" placeholder="Ex.: Passando pelo CAHK? Tem Coca gelada por quatro reais."></textarea></label><label class="span2">URL de áudio (opcional)<input id="audioUrl" placeholder="Se deixar vazio, usa a voz do navegador"></label><label class="check span2"><input id="annActive" type="checkbox" checked>Ativa</label><div class="row span2"><button class="primary" type="submit">Salvar locução</button><button class="ghost" id="clear" type="button">Limpar</button></div></form></section></div><section class="card"><h2>Locuções cadastradas</h2><div id="anns"></div></section></div></main><script>
-const C=window.RADIO_CONFIG,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];let state=null;const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));function token(){return $('#token').value.trim()}async function api(body){const r=await fetch(`${C.SUPABASE_URL}/functions/v1/radio-admin`,{method:'POST',headers:{'Content-Type':'application/json','apikey':C.SUPABASE_PUBLISHABLE_KEY,'x-admin-token':token()},body:JSON.stringify(body)}),j=await r.json();if(!r.ok)throw new Error(j.error||'Erro');return j}function voices(){const vs=speechSynthesis.getVoices().filter(v=>/^pt(-|_)/i.test(v.lang)),cur=state?.config?.preferred_voice||'';$('#voice').innerHTML='<option value="">Automática</option>'+vs.map(v=>`<option ${cur===v.name?'selected':''} value="${esc(v.name)}">${esc(v.name)} — ${esc(v.lang)}</option>`).join('')}speechSynthesis.onvoiceschanged=voices;async function load(){state=await api({action:'list'});const c=state.config;$('#stationName').value=c.station_name;$('#autoMode').checked=c.auto_mode;$('#annsEnabled').checked=c.announcements_enabled;$('#every').value=c.announcement_every_tracks;$('#rate').value=c.speech_rate;$('#pitch').value=c.speech_pitch;voices();render();$('#trackMetric').innerHTML=`<div class="card" style="margin-top:12px"><span class="muted small">Faixas automáticas carregadas</span><h2>${state.tracks.length}</h2></div>`}function render(){$('#anns').innerHTML=state.announcements.length?state.announcements.map(a=>`<div class="item"><div><span class="pill">${esc(a.type)}</span><strong style="display:block;margin-top:6px">${esc(a.title)}</strong><div class="muted">${esc(a.text)}</div><div class="small muted">Prioridade ${a.priority} • ${a.active?'ativa':'desativada'}${a.audio_url?' • áudio próprio':''}</div></div><div class="actions"><button class="ghost" data-edit="${a.id}">Editar</button><button class="danger" data-del="${a.id}">Excluir</button></div></div>`).join(''):'<div class="muted">Nenhuma locução cadastrada.</div>';$$('[data-edit]').forEach(b=>b.onclick=()=>edit(b.dataset.edit));$$('[data-del]').forEach(b=>b.onclick=()=>del(b.dataset.del))}function edit(id){const a=state.announcements.find(x=>x.id===id);$('#annId').value=a.id;$('#annTitle').value=a.title;$('#annType').value=a.type;$('#annPriority').value=a.priority;$('#annText').value=a.text;$('#audioUrl').value=a.audio_url||'';$('#annActive').checked=a.active}function clear(){$('#annForm').reset();$('#annId').value='';$('#annPriority').value='0';$('#annActive').checked=true}$('#clear').onclick=clear;$('#enter').onclick=async()=>{localStorage.setItem('radioCahkAdmin',token());$('#loginMsg').textContent='Validando…';try{await load();$('#login').classList.add('hidden');$('#panel').classList.remove('hidden')}catch(e){$('#loginMsg').textContent=e.message}};$('#cfg').onsubmit=async e=>{e.preventDefault();try{await api({action:'save_config',config:{station_name:$('#stationName').value,auto_mode:$('#autoMode').checked,announcements_enabled:$('#annsEnabled').checked,announcement_every_tracks:Number($('#every').value),preferred_voice:$('#voice').value||null,speech_rate:Number($('#rate').value),speech_pitch:Number($('#pitch').value)}});await load();alert('Configuração salva.')}catch(e){alert(e.message)}};$('#annForm').onsubmit=async e=>{e.preventDefault();const id=$('#annId').value,a={title:$('#annTitle').value,text:$('#annText').value,type:$('#annType').value,priority:Number($('#annPriority').value)||0,audio_url:$('#audioUrl').value.trim()||null,active:$('#annActive').checked};try{await api(id?{action:'update_announcement',id,announcement:a}:{action:'create_announcement',announcement:a});clear();await load()}catch(e){alert(e.message)}};async function del(id){if(!confirm('Excluir esta locução?'))return;try{await api({action:'delete_announcement',id});await load()}catch(e){alert(e.message)}}$('#refresh').onclick=async()=>{$('#refreshMsg').textContent='Consultando YouTube…';try{const j=await api({action:'refresh_top'});$('#refreshMsg').textContent=`Atualizado: ${j.count} faixas elegíveis.`;await load()}catch(e){$('#refreshMsg').textContent=e.message}};const saved=localStorage.getItem('radioCahkAdmin');if(saved)$('#token').value=saved;
-</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rádio CAHK — Programação</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+</head>
+<body>
+<main class="shell admin">
+<header class="hero"><span class="pill">ADMINISTRAÇÃO</span><h1>PROGRAMAÇÃO</h1><p>Controle músicas, locuções e os áudios enviados pela galera.</p></header>
+
+<section id="login" class="card login-card">
+  <h2>Acesso administrativo</h2>
+  <div class="stack"><input id="token" type="password" placeholder="Código administrativo"><button id="enter" class="primary">Entrar</button><div id="loginMsg" class="muted"></div></div>
+</section>
+
+<div id="panel" class="hidden">
+  <div class="admin-grid">
+    <section class="card">
+      <h2>Configuração da rádio</h2>
+      <form id="cfg" class="form-grid">
+        <label class="span2">Nome<input id="stationName"></label>
+        <label class="check span2"><input id="autoMode" type="checkbox">Programação automática</label>
+        <label class="check span2"><input id="annsEnabled" type="checkbox">Locuções automáticas</label>
+        <label>Locução a cada<input id="every" type="number" min="1" max="20"></label><label>faixas<input value="músicas" disabled></label>
+        <label class="check span2"><input id="communityEnabled" type="checkbox">Áudios da galera</label>
+        <label>Áudio da galera a cada<input id="communityEvery" type="number" min="1" max="50"></label><label>faixas<input value="músicas" disabled></label>
+        <label>Velocidade da voz<input id="rate" type="number" min=".5" max="2" step=".05"></label>
+        <label>Tom da voz<input id="pitch" type="number" min=".5" max="2" step=".05"></label>
+        <label class="span2">Voz preferida<select id="voice"><option value="">Automática</option></select></label>
+        <button class="primary span2">Salvar configuração</button>
+      </form>
+      <hr class="soft-rule">
+      <button id="refresh" class="ghost full">Atualizar Top Música do YouTube</button>
+      <div id="refreshMsg" class="status muted small"></div><div id="trackMetric"></div>
+    </section>
+
+    <section class="card">
+      <h2>Nova locução</h2>
+      <form id="annForm" class="form-grid">
+        <input id="annId" type="hidden">
+        <label class="span2">Nome interno<input id="annTitle" placeholder="Ex.: Coca gelada"></label>
+        <label>Tipo<select id="annType"><option value="station">Vinheta</option><option value="product">Produto</option><option value="event">Evento</option><option value="custom">Outro</option></select></label>
+        <label>Prioridade<input id="annPriority" type="number" value="0"></label>
+        <label class="span2">Texto<textarea id="annText" placeholder="Ex.: Passando pelo CAHK? Tem Coca gelada por quatro reais."></textarea></label>
+        <label class="span2">URL de áudio (opcional)<input id="audioUrl" placeholder="Se deixar vazio, usa a voz do navegador"></label>
+        <label class="check span2"><input id="annActive" type="checkbox" checked>Ativa</label>
+        <div class="row span2"><button class="primary" type="submit">Salvar locução</button><button class="ghost" id="clear" type="button">Limpar</button></div>
+      </form>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="section-title-row"><div><span class="pill">🎙 MODERAÇÃO</span><h2>Áudios da galera</h2></div><span id="pendingCount" class="counter-badge">0 pendentes</span></div>
+    <p class="muted small">Escute antes de aprovar. Só os aprovados e ativos podem entrar na programação automática.</p>
+    <div class="audio-admin-tabs">
+      <button class="ghost active-tab" data-audio-filter="pending">Pendentes</button>
+      <button class="ghost" data-audio-filter="approved">Aprovados</button>
+      <button class="ghost" data-audio-filter="rejected">Rejeitados</button>
+    </div>
+    <div id="communityAudios"></div>
+  </section>
+
+  <section class="card"><h2>Locuções cadastradas</h2><div id="anns"></div></section>
+</div>
+</main>
+
+<script>
+const C=window.RADIO_CONFIG,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+let state={config:{},announcements:[],tracks:[],audios:[]};
+let audioFilter='pending';
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function token(){return $('#token').value.trim()}
+async function api(body){const r=await fetch(`${C.SUPABASE_URL}/functions/v1/radio-admin`,{method:'POST',headers:{'Content-Type':'application/json','apikey':C.SUPABASE_PUBLISHABLE_KEY,'x-admin-token':token()},body:JSON.stringify(body)});const j=await r.json();if(!r.ok)throw new Error(j.error||'Erro');return j}
+function fmtDate(v){if(!v)return '';try{return new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(v))}catch{return ''}}
+function formatBytes(n){n=Number(n||0);return n<1024?`${n} B`:n<1048576?`${(n/1024).toFixed(0)} KB`:`${(n/1048576).toFixed(1)} MB`}
+function loadVoices(){const current=state.config.preferred_voice||'';const voices=speechSynthesis.getVoices().filter(v=>/^pt(-|_)/i.test(v.lang));$('#voice').innerHTML='<option value="">Automática</option>'+voices.map(v=>`<option ${current&&v.name.includes(current)?'selected':''} value="${esc(v.name)}">${esc(v.name)} — ${esc(v.lang)}</option>`).join('')}
+speechSynthesis.onvoiceschanged=loadVoices;
+
+async function load(){
+  state=await api({action:'list'});
+  const c=state.config||{};
+  $('#stationName').value=c.station_name||'';
+  $('#autoMode').checked=!!c.auto_mode;
+  $('#annsEnabled').checked=!!c.announcements_enabled;
+  $('#every').value=c.announcement_every_tracks||4;
+  $('#communityEnabled').checked=c.community_audio_enabled!==false;
+  $('#communityEvery').value=c.community_audio_every_tracks||5;
+  $('#rate').value=c.speech_rate||1;
+  $('#pitch').value=c.speech_pitch||1;
+  loadVoices();
+  renderAnnouncements();
+  renderAudios();
+  $('#trackMetric').innerHTML=`<div class="metric-card"><span class="muted small">Faixas automáticas carregadas</span><h2>${state.tracks?.length||0}</h2></div>`;
+}
+
+function renderAnnouncements(){
+  $('#anns').innerHTML=state.announcements?.length?state.announcements.map(a=>`<div class="item"><div><span class="pill">${esc(a.type)}</span><strong class="block-title">${esc(a.title)}</strong><div class="muted">${esc(a.text)}</div><div class="small muted">Prioridade ${a.priority} • ${a.active?'ativa':'desativada'}${a.audio_url?' • áudio próprio':''}</div></div><div class="actions"><button class="ghost" data-edit="${a.id}">Editar</button><button class="danger" data-del="${a.id}">Excluir</button></div></div>`).join(''):'<div class="muted">Nenhuma locução cadastrada.</div>';
+  $$('[data-edit]').forEach(b=>b.onclick=()=>editAnnouncement(b.dataset.edit));
+  $$('[data-del]').forEach(b=>b.onclick=()=>deleteAnnouncement(b.dataset.del));
+}
+
+function renderAudios(){
+  const all=state.audios||[];
+  const pending=all.filter(a=>a.status==='pending').length;
+  $('#pendingCount').textContent=`${pending} pendente${pending===1?'':'s'}`;
+  const items=all.filter(a=>a.status===audioFilter);
+  $('#communityAudios').innerHTML=items.length?items.map(a=>`
+    <article class="community-admin-item">
+      <div class="community-admin-main">
+        <div class="community-admin-heading">
+          <div><span class="pill">${a.status==='pending'?'AGUARDANDO':a.status==='approved'?(a.active?'ATIVO':'PAUSADO'):'REJEITADO'}</span><strong>${esc(a.display_name)}</strong></div>
+          <span class="muted small">${fmtDate(a.created_at)}</span>
+        </div>
+        ${a.audio_url?`<audio controls preload="none" src="${esc(a.audio_url)}"></audio>`:'<div class="muted">Prévia indisponível.</div>'}
+        <div class="muted small">${a.duration_seconds}s • ${formatBytes(a.file_size)} • tocou ${a.play_count||0} vez(es)</div>
+        ${a.rejection_reason?`<div class="reject-reason">Motivo: ${esc(a.rejection_reason)}</div>`:''}
+      </div>
+      <div class="actions audio-actions">
+        ${a.status==='pending'?`<button class="primary" data-approve="${a.id}">✓ Aprovar</button><button class="danger" data-reject="${a.id}">✕ Rejeitar</button>`:''}
+        ${a.status==='approved'?`<button class="ghost" data-toggle="${a.id}" data-active="${a.active?'0':'1'}">${a.active?'Pausar':'Ativar'}</button>`:''}
+        <button class="danger" data-audio-delete="${a.id}">Excluir</button>
+      </div>
+    </article>`).join(''):`<div class="muted empty-state">Nenhum áudio ${audioFilter==='pending'?'aguardando aprovação':audioFilter==='approved'?'aprovado':'rejeitado'}.</div>`;
+
+  $$('[data-approve]').forEach(b=>b.onclick=()=>audioAction('approve_audio',b.dataset.approve));
+  $$('[data-reject]').forEach(b=>b.onclick=async()=>{const reason=prompt('Motivo da rejeição (opcional):')||'';await audioAction('reject_audio',b.dataset.reject,{reason})});
+  $$('[data-toggle]').forEach(b=>b.onclick=()=>audioAction('update_audio',b.dataset.toggle,{active:b.dataset.active==='1'}));
+  $$('[data-audio-delete]').forEach(b=>b.onclick=async()=>{if(confirm('Excluir definitivamente este áudio?'))await audioAction('delete_audio',b.dataset.audioDelete)});
+}
+
+async function audioAction(action,id,extra={}){try{await api({action,id,...extra});await load()}catch(e){alert(e.message)}}
+
+$$('[data-audio-filter]').forEach(btn=>btn.onclick=()=>{audioFilter=btn.dataset.audioFilter;$$('[data-audio-filter]').forEach(x=>x.classList.toggle('active-tab',x===btn));renderAudios()});
+
+function editAnnouncement(id){const a=state.announcements.find(x=>x.id===id);$('#annId').value=a.id;$('#annTitle').value=a.title;$('#annType').value=a.type;$('#annPriority').value=a.priority;$('#annText').value=a.text;$('#audioUrl').value=a.audio_url||'';$('#annActive').checked=a.active;window.scrollTo({top:0,behavior:'smooth'})}
+function clearAnnouncement(){$('#annForm').reset();$('#annId').value='';$('#annPriority').value='0';$('#annActive').checked=true}
+$('#clear').onclick=clearAnnouncement;
+
+$('#enter').onclick=async()=>{localStorage.setItem('radioCahkAdmin',token());$('#loginMsg').textContent='Validando…';try{await load();$('#login').classList.add('hidden');$('#panel').classList.remove('hidden')}catch(e){$('#loginMsg').textContent=e.message}};
+
+$('#cfg').onsubmit=async e=>{e.preventDefault();try{await api({action:'save_config',config:{station_name:$('#stationName').value,auto_mode:$('#autoMode').checked,announcements_enabled:$('#annsEnabled').checked,announcement_every_tracks:Number($('#every').value),community_audio_enabled:$('#communityEnabled').checked,community_audio_every_tracks:Number($('#communityEvery').value),preferred_voice:$('#voice').value||null,speech_rate:Number($('#rate').value),speech_pitch:Number($('#pitch').value)}});await load();alert('Configuração salva.')}catch(e){alert(e.message)}};
+
+$('#annForm').onsubmit=async e=>{e.preventDefault();const id=$('#annId').value,a={title:$('#annTitle').value,text:$('#annText').value,type:$('#annType').value,priority:Number($('#annPriority').value)||0,audio_url:$('#audioUrl').value.trim()||null,active:$('#annActive').checked};try{await api(id?{action:'update_announcement',id,announcement:a}:{action:'create_announcement',announcement:a});clearAnnouncement();await load()}catch(e){alert(e.message)}};
+async function deleteAnnouncement(id){if(!confirm('Excluir esta locução?'))return;try{await api({action:'delete_announcement',id});await load()}catch(e){alert(e.message)}}
+$('#refresh').onclick=async()=>{$('#refreshMsg').textContent='Consultando YouTube…';try{const j=await api({action:'refresh_top'});$('#refreshMsg').textContent=`Atualizado: ${j.count} faixas elegíveis.`;await load()}catch(e){$('#refreshMsg').textContent=e.message}};
+
+const saved=localStorage.getItem('radioCahkAdmin');if(saved)$('#token').value=saved;
+</script>
+</body></html>

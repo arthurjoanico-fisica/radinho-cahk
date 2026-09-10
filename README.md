@@ -1,36 +1,22 @@
-# Rádio CAHK v2
+# CaixaFlex 2 — Cloudflare/GitHub
 
-Arquivos para substituir o frontend atual do Radinho.
+Esta pasta deve ser a raiz do repositório `caixaflex-2`.
 
-## Endereços
-- `/` — pedidos de música
-- `/player.html` — computador da sala
-- `/admin.html` — locuções e programação
+Antes de publicar, edite `public/config.js` e coloque:
+- URL do projeto Supabase;
+- chave **publishable** (`sb_publishable_...`).
 
-## Backend já instalado
-O Supabase atual do Radinho já recebeu as tabelas e funções da Rádio CAHK v2. A fila existente foi preservada.
+Nunca coloque a chave `service_role` no navegador.
 
-## Falta uma configuração para o modo automático
-Crie uma chave da YouTube Data API v3 e adicione ao Supabase como secret com o nome:
+Deploy pelo terminal:
+```bash
+npm install
+npx wrangler login
+npm run deploy
+```
 
-`YOUTUBE_API_KEY`
+O projeto usa **Workers Static Assets** (`assets.directory = ./public`), sem Worker backend próprio:
+o backend seguro fica no Supabase.
 
-Depois abra `/admin.html` e clique em `Atualizar Top Música do YouTube`.
-
-A função consulta `videos.list` com `chart=mostPopular`, região BR e categoria Música (10), e exclui vídeos não incorporáveis, lives, vídeos com menos de 2 minutos e mais de 15 minutos.
-
-## Locuções
-Você controla o texto, tipo, prioridade, ativação e uma URL opcional de MP3. Sem MP3, a voz pt-BR disponível no navegador é usada.
-
-## Prioridade
-1. Pedidos dos usuários
-2. Faixas manuais
-3. Locução, se estiver na hora e não houver pedido
-4. Música automática
-
-O código administrativo é o mesmo do player atual e fica salvo localmente no computador quando digitado.
-
-
-## Busca interna do YouTube
-
-A página pública agora pesquisa vídeos pela Edge Function `youtube-search`. A função usa cache de 6 horas por pesquisa e limita buscas novas por IP para preservar a quota da YouTube Data API.
+Impressão: o sistema gera comprovantes de 58 mm ou 80 mm.
+O comprovante é **interno/não fiscal**. NFC-e exige integração fiscal específica.

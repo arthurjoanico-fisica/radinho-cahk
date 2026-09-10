@@ -1,7 +1,12 @@
 {
-  "name": "radio-cahk-v2",
-  "version": "2.0.0",
+  "name": "caixaflex-2",
+  "version": "1.0.0",
   "private": true,
-  "scripts": { "dev": "wrangler dev", "deploy": "wrangler deploy" },
-  "devDependencies": { "wrangler": "latest" }
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "latest"
+  }
 }
