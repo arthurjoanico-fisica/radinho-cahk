@@ -29,3 +29,8 @@ Você controla o texto, tipo, prioridade, ativação e uma URL opcional de MP3. 
 4. Música automática
 
 O código administrativo é o mesmo do player atual e fica salvo localmente no computador quando digitado.
+
+
+## Busca interna do YouTube
+
+A página pública agora pesquisa vídeos pela Edge Function `youtube-search`. A função usa cache de 6 horas por pesquisa e limita buscas novas por IP para preservar a quota da YouTube Data API.

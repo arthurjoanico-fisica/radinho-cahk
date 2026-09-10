@@ -1,3 +1,211 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rádio CAHK</title><link rel="stylesheet" href="/styles.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/config.js"></script></head><body><div class="bg">E = mc² &nbsp; F = ma &nbsp; ∇·E = ρ/ε₀ &nbsp; ΔxΔp ≥ ħ/2 &nbsp; E = hf &nbsp; v = λf<br>∮B·dl = μ₀I &nbsp; p = mv &nbsp; U = ½kx² &nbsp; ω = 2πf</div><main class="shell"><header class="hero"><span class="pill">NO AR • CENTRO ACADÊMICO HUGO KREMER</span><h1>RÁDIO CAHK</h1><p>Você escolhe. A rádio continua.</p></header><div class="toplinks"><a href="/player.html">Player da sala</a><a href="/admin.html">Programação</a></div><section class="card"><h2>Peça uma música</h2><div class="row"><input id="url" placeholder="Cole o link do YouTube"><button class="primary" id="add">Adicionar à fila</button></div><div class="status muted" id="msg"></div></section><section class="card"><h2>Tocando agora</h2><div id="now"><div class="muted">Carregando…</div></div></section><section class="card"><h2>Próximos pedidos</h2><div id="queue"></div><p class="muted small">Quando não houver pedidos, a Rádio CAHK assume a programação automaticamente.</p></section></main><script>
-const C=window.RADIO_CONFIG,sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_PUBLISHABLE_KEY);const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));async function load(){const{data,error}=await sb.from('queue').select('*').in('status',['playing','queued']).order('position',{ascending:true}).order('created_at',{ascending:true});if(error)return;const p=data.find(x=>x.status==='playing'),q=data.filter(x=>x.status==='queued'&&x.source!=='auto');document.querySelector('#now').innerHTML=p?`<div class="now"><img class="thumb" src="${esc(p.thumbnail)}"><div><span class="pill">${p.source==='auto'?'PROGRAMAÇÃO DA RÁDIO':'PEDIDO'}</span><h3>${esc(p.title)}</h3><div class="muted">${esc(p.channel||'')}</div></div></div>`:`<div class="muted">A rádio está preparando a próxima faixa.</div>`;document.querySelector('#queue').innerHTML=q.length?q.map((x,i)=>`<div class="queue-item"><img src="${esc(x.thumbnail)}"><div><strong>${i+1}. ${esc(x.title)}</strong><div class="muted small">${esc(x.channel||'')}</div></div><span class="pill">PEDIDO</span></div>`).join(''):`<div class="muted">Nenhum pedido na fila — programação automática ativa.</div>`}document.querySelector('#add').onclick=async()=>{const u=document.querySelector('#url').value.trim(),m=document.querySelector('#msg');if(!u){m.textContent='Cole um link do YouTube.';return}m.textContent='Adicionando…';try{const r=await fetch(`${C.SUPABASE_URL}/functions/v1/queue-add`,{method:'POST',headers:{'Content-Type':'application/json','apikey':C.SUPABASE_PUBLISHABLE_KEY},body:JSON.stringify({url:u})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Não foi possível adicionar');document.querySelector('#url').value='';m.textContent='Pedido recebido. Ele entrou na fila da rádio.';load()}catch(e){m.textContent=e.message}};sb.channel('radio-public').on('postgres_changes',{event:'*',schema:'public',table:'queue'},load).subscribe();load();
-</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rádio CAHK</title>
+<link rel="stylesheet" href="/styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+</head>
+<body>
+<div class="bg">E = mc² &nbsp; F = ma &nbsp; ∇·E = ρ/ε₀ &nbsp; ΔxΔp ≥ ħ/2 &nbsp; E = hf &nbsp; v = λf<br>∮B·dl = μ₀I &nbsp; p = mv &nbsp; U = ½kx² &nbsp; ω = 2πf &nbsp; P = W/Δt</div>
+<main class="shell">
+  <header class="hero">
+    <span class="pill">NO AR • CENTRO ACADÊMICO HUGO KREMER</span>
+    <h1>RÁDIO CAHK</h1>
+    <p>Você escolhe. A rádio continua.</p>
+  </header>
+
+  <div class="toplinks">
+    <a href="/player.html">Player da sala</a>
+    <a href="/admin.html">Programação</a>
+  </div>
+
+  <section class="card">
+    <h2>Pesquisar no YouTube</h2>
+    <div class="row">
+      <input id="searchText" placeholder="Ex.: Charlie Brown Jr. Céu Azul" autocomplete="off">
+      <button class="primary" id="searchBtn">Buscar</button>
+    </div>
+    <div class="status muted" id="searchMsg"></div>
+    <div id="searchResults" class="search-results"></div>
+  </section>
+
+  <div class="separator"><span>ou</span></div>
+
+  <section class="card">
+    <h2>Colar link do YouTube</h2>
+    <div class="row">
+      <input id="url" placeholder="https://youtube.com/watch?v=...">
+      <button class="primary" id="add">Adicionar à fila</button>
+    </div>
+    <div class="status muted" id="msg"></div>
+  </section>
+
+  <section class="card">
+    <h2>Tocando agora</h2>
+    <div id="now"><div class="muted">Carregando…</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Próximos pedidos</h2>
+    <div id="queue"></div>
+    <p class="muted small">Quando não houver pedidos, a Rádio CAHK assume a programação automaticamente.</p>
+  </section>
+</main>
+
+<script>
+const C=window.RADIO_CONFIG;
+const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_PUBLISHABLE_KEY);
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const fmtDuration=(sec)=>{
+  sec=Number(sec||0);
+  if(!sec) return '';
+  const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+  return h?`${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${m}:${String(s).padStart(2,'0')}`;
+};
+
+async function load(){
+  const {data,error}=await sb.from('queue').select('*').in('status',['playing','queued']).order('position',{ascending:true}).order('created_at',{ascending:true});
+  if(error)return;
+
+  const playing=data.find(x=>x.status==='playing');
+  const queued=data.filter(x=>x.status==='queued' && x.source!=='auto');
+
+  document.querySelector('#now').innerHTML=playing?`
+    <div class="now">
+      <img class="thumb" src="${esc(playing.thumbnail)}">
+      <div>
+        <span class="pill">${playing.source==='auto'?'PROGRAMAÇÃO DA RÁDIO':'PEDIDO'}</span>
+        <h3>${esc(playing.title)}</h3>
+        <div class="muted">${esc(playing.channel||'')}</div>
+      </div>
+    </div>`:
+    `<div class="muted">A rádio está preparando a próxima faixa.</div>`;
+
+  document.querySelector('#queue').innerHTML=queued.length?queued.map((x,i)=>`
+    <div class="queue-item">
+      <img src="${esc(x.thumbnail)}">
+      <div>
+        <strong>${i+1}. ${esc(x.title)}</strong>
+        <div class="muted small">${esc(x.channel||'')}</div>
+      </div>
+      <span class="pill">PEDIDO</span>
+    </div>`).join(''):
+    `<div class="muted">Nenhum pedido na fila — programação automática ativa.</div>`;
+}
+
+async function addUrl(url, button=null){
+  const clean=String(url||'').trim();
+  if(!clean) throw new Error('Link inválido.');
+
+  if(button){
+    button.disabled=true;
+    button.textContent='Adicionando...';
+  }
+
+  try{
+    const r=await fetch(`${C.SUPABASE_URL}/functions/v1/queue-add`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':C.SUPABASE_PUBLISHABLE_KEY},
+      body:JSON.stringify({url:clean})
+    });
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Não foi possível adicionar.');
+    await load();
+    return j;
+  } finally {
+    if(button){
+      button.disabled=false;
+      button.textContent='Adicionar à fila';
+    }
+  }
+}
+
+document.querySelector('#add').onclick=async()=>{
+  const input=document.querySelector('#url');
+  const msg=document.querySelector('#msg');
+  if(!input.value.trim()){msg.textContent='Cole um link do YouTube.';return;}
+  msg.textContent='Adicionando…';
+  try{
+    await addUrl(input.value,document.querySelector('#add'));
+    input.value='';
+    msg.textContent='Pedido recebido. Ele entrou na fila da rádio.';
+  }catch(e){
+    msg.textContent=e.message;
+  }
+};
+
+async function searchYoutube(){
+  const q=document.querySelector('#searchText').value.trim();
+  const msg=document.querySelector('#searchMsg');
+  const results=document.querySelector('#searchResults');
+  const btn=document.querySelector('#searchBtn');
+
+  if(q.length<2){
+    msg.textContent='Digite pelo menos 2 caracteres.';
+    results.innerHTML='';
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent='Buscando…';
+  msg.textContent='Pesquisando no YouTube…';
+  results.innerHTML='';
+
+  try{
+    const r=await fetch(`${C.SUPABASE_URL}/functions/v1/youtube-search`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','apikey':C.SUPABASE_PUBLISHABLE_KEY},
+      body:JSON.stringify({q})
+    });
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'Não foi possível pesquisar.');
+
+    const items=j.results||[];
+    msg.textContent=items.length
+      ? `${items.length} resultado${items.length===1?'':'s'} encontrado${items.length===1?'':'s'}.`
+      : 'Nenhum resultado encontrado.';
+
+    results.innerHTML=items.map((v,i)=>`
+      <article class="search-result">
+        <img src="${esc(v.thumbnail)}" alt="">
+        <div class="search-result-info">
+          <strong>${esc(v.title)}</strong>
+          <div class="muted small">${esc(v.channel||'')}${v.durationSeconds?` • ${fmtDuration(v.durationSeconds)}`:''}</div>
+        </div>
+        <button class="primary add-result" data-url="${esc(v.url)}">Adicionar à fila</button>
+      </article>
+    `).join('');
+
+    document.querySelectorAll('.add-result').forEach(button=>{
+      button.onclick=async()=>{
+        try{
+          await addUrl(button.dataset.url,button);
+          msg.textContent='Música adicionada à fila.';
+        }catch(e){
+          msg.textContent=e.message;
+        }
+      };
+    });
+  }catch(e){
+    msg.textContent=e.message;
+  }finally{
+    btn.disabled=false;
+    btn.textContent='Buscar';
+  }
+}
+
+document.querySelector('#searchBtn').onclick=searchYoutube;
+document.querySelector('#searchText').addEventListener('keydown',e=>{
+  if(e.key==='Enter') searchYoutube();
+});
+
+sb.channel('radio-public')
+  .on('postgres_changes',{event:'*',schema:'public',table:'queue'},load)
+  .subscribe();
+
+load();
+</script>
+</body>
+</html>
