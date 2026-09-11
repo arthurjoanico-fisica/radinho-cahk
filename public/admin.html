@@ -55,18 +55,18 @@
 
   <section class="card">
     <div class="section-title-row">
-      <div><span class="pill">⏰ HORA MARCADA</span><h2>Áudio agendado</h2></div>
+      <div><span class="pill">⏰ TODO DIA</span><h2>Áudio diário automático</h2></div>
       <span class="counter-badge">HORÁRIO EXATO</span>
     </div>
-    <p class="muted small">O player prepara o áudio alguns segundos antes e, no horário marcado, pausa o que estiver tocando, reproduz o aviso e depois continua a programação.</p>
+    <p class="muted small">Envie um áudio e escolha somente o horário. Ex.: 12:00 → o aviso do RU tocará automaticamente todos os dias ao meio-dia. Não há data para escolher.</p>
     <form id="scheduledForm" class="form-grid scheduled-form">
-      <label class="span2">Nome do áudio<input id="scheduledTitle" maxlength="120" placeholder="Ex.: Aviso de fechamento"></label>
+      <label class="span2">Nome do áudio<input id="scheduledTitle" maxlength="120" placeholder="Ex.: RU aberto"></label>
       <label class="span2">Arquivo de áudio<input id="scheduledFile" type="file" accept="audio/*"></label>
-      <label class="span2">Data e horário<input id="scheduledWhen" type="datetime-local" step="1"></label>
-      <div class="span2 row"><button class="primary" type="submit">Agendar áudio</button><span id="scheduledMsg" class="status muted small"></span></div>
+      <label class="span2">Horário diário<input id="scheduledWhen" type="time" step="1"></label>
+      <div class="span2 row"><button class="primary" type="submit">Salvar áudio diário</button><span id="scheduledMsg" class="status muted small"></span></div>
     </form>
     <hr class="soft-rule">
-    <h3>Agendamentos</h3>
+    <h3>Áudios que tocam todos os dias</h3>
     <div id="scheduledList"><div class="muted">Carregando…</div></div>
   </section>
 
@@ -114,7 +114,12 @@ function defaultScheduledTime(){
   const d=new Date(Date.now()+5*60*1000);
   d.setSeconds(0,0);
   const pad=n=>String(n).padStart(2,'0');
-  $('#scheduledWhen').value=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+  $('#scheduledWhen').value=`${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+}
+function fmtDailyTime(v){
+  if(!v)return '--:--';
+  const p=String(v).split(':');
+  return `${p[0]?.padStart(2,'0')||'00'}:${p[1]?.padStart(2,'0')||'00'}${p[2]&&p[2]!=='00'?`:${p[2]}`:''}`;
 }
 async function loadScheduled(){
   const j=await scheduledApi({action:'list'});
@@ -122,38 +127,35 @@ async function loadScheduled(){
   renderScheduled();
 }
 function scheduledStatus(x){
-  if(x.played_at)return 'TOCADO';
-  if(x.cancelled_at||!x.active)return 'CANCELADO';
-  return 'AGENDADO';
+  return x.active&&!x.cancelled_at?'ATIVO':'PAUSADO';
 }
 function renderScheduled(){
-  const now=Date.now();
-  const items=[...scheduledItems].sort((a,b)=>new Date(a.scheduled_for)-new Date(b.scheduled_for));
+  const items=[...scheduledItems].sort((a,b)=>String(a.daily_time||'').localeCompare(String(b.daily_time||'')));
   $('#scheduledList').innerHTML=items.length?items.map(x=>{
     const status=scheduledStatus(x);
-    const late=!x.played_at&&!x.cancelled_at&&new Date(x.scheduled_for).getTime()<now;
     return `<div class="item scheduled-item">
       <div>
-        <span class="pill">${late?'ATRASADO':status}</span>
+        <span class="pill">${status}</span>
         <strong class="block-title">${esc(x.title)}</strong>
-        <div class="scheduled-time">${fmtDate(x.scheduled_for)}</div>
+        <div class="scheduled-time">Todos os dias às ${fmtDailyTime(x.daily_time)}</div>
+        <div class="muted small">Próxima reprodução: ${fmtDate(x.scheduled_for) || 'calculando…'}</div>
         ${x.audio_url?`<audio controls preload="none" src="${esc(x.audio_url)}"></audio>`:''}
-        <div class="muted small">${x.duration_seconds?`${x.duration_seconds}s • `:''}${formatBytes(x.file_size)}${x.played_at?` • reproduzido ${fmtDate(x.played_at)}`:''}</div>
+        <div class="muted small">${x.duration_seconds?`${x.duration_seconds}s • `:''}${formatBytes(x.file_size)} • tocou ${x.play_count||0} vez(es)${x.last_played_at?` • última ${fmtDate(x.last_played_at)}`:''}</div>
       </div>
       <div class="actions">
-        ${!x.played_at&&!x.cancelled_at?`<button class="danger" data-sched-cancel="${x.id}">Cancelar</button>`:''}
-        ${!x.played_at?`<button class="ghost" data-sched-move="${x.id}">Reagendar</button>`:''}
+        ${x.active&&!x.cancelled_at?`<button class="danger" data-sched-cancel="${x.id}">Pausar</button>`:`<button class="primary" data-sched-activate="${x.id}">Ativar</button>`}
+        <button class="ghost" data-sched-move="${x.id}">Alterar horário</button>
       </div>
     </div>`;
-  }).join(''):'<div class="muted empty-state">Nenhum áudio agendado.</div>';
-  $$('[data-sched-cancel]').forEach(b=>b.onclick=async()=>{if(!confirm('Cancelar este áudio agendado?'))return;try{await scheduledApi({action:'cancel',id:b.dataset.schedCancel});await loadScheduled()}catch(e){alert(e.message)}});
+  }).join(''):'<div class="muted empty-state">Nenhum áudio diário cadastrado.</div>';
+  $$('[data-sched-cancel]').forEach(b=>b.onclick=async()=>{if(!confirm('Pausar este áudio diário?'))return;try{await scheduledApi({action:'cancel',id:b.dataset.schedCancel});await loadScheduled()}catch(e){alert(e.message)}});
+  $$('[data-sched-activate]').forEach(b=>b.onclick=async()=>{try{await scheduledApi({action:'activate',id:b.dataset.schedActivate});await loadScheduled()}catch(e){alert(e.message)}});
   $$('[data-sched-move]').forEach(b=>b.onclick=async()=>{
     const item=scheduledItems.find(x=>x.id===b.dataset.schedMove); if(!item)return;
-    const d=new Date(item.scheduled_for); const pad=n=>String(n).padStart(2,'0');
-    const local=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    const value=prompt('Novo horário (AAAA-MM-DDTHH:MM:SS):',local); if(!value)return;
-    const when=new Date(value); if(Number.isNaN(when.getTime()))return alert('Data/hora inválida.');
-    try{await scheduledApi({action:'reschedule',id:item.id,scheduled_for:when.toISOString()});await loadScheduled()}catch(e){alert(e.message)}
+    const value=prompt('Novo horário diário (HH:MM ou HH:MM:SS):',String(item.daily_time||'').slice(0,8)); if(!value)return;
+    const ok=/^(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value.trim());
+    if(!ok)return alert('Horário inválido. Use HH:MM ou HH:MM:SS.');
+    try{await scheduledApi({action:'reschedule',id:item.id,daily_time:value.trim()});await loadScheduled()}catch(e){alert(e.message)}
   });
 }
 async function audioDuration(file){
@@ -243,15 +245,13 @@ $('#scheduledForm').onsubmit=async e=>{
   if(!title)return $('#scheduledMsg').textContent='Digite um nome.';
   if(!file)return $('#scheduledMsg').textContent='Escolha o arquivo de áudio.';
   if(file.size>3*1024*1024)return $('#scheduledMsg').textContent='O arquivo deve ter no máximo 3 MB.';
-  if(!value)return $('#scheduledMsg').textContent='Escolha a data e o horário.';
-  const when=new Date(value);
-  if(Number.isNaN(when.getTime()))return $('#scheduledMsg').textContent='Data/hora inválida.';
-  $('#scheduledMsg').textContent='Enviando e agendando…';
+  if(!value)return $('#scheduledMsg').textContent='Escolha o horário.';
+  $('#scheduledMsg').textContent='Enviando e salvando…';
   try{
     const duration=await audioDuration(file);
     const fd=new FormData();
     fd.append('title',title);
-    fd.append('scheduled_for',when.toISOString());
+    fd.append('daily_time',value);
     fd.append('duration_seconds',String(duration||0));
     fd.append('file',file,file.name);
     const r=await fetch(`${C.SUPABASE_URL}/functions/v1/radio-scheduled-upload`,{
@@ -260,8 +260,8 @@ $('#scheduledForm').onsubmit=async e=>{
       body:fd
     });
     const j=await r.json();
-    if(!r.ok)throw new Error(j.error||'Erro ao agendar');
-    $('#scheduledMsg').textContent='Agendado com sucesso.';
+    if(!r.ok)throw new Error(j.error||'Erro ao salvar');
+    $('#scheduledMsg').textContent=`Salvo. Vai tocar todos os dias às ${fmtDailyTime(value)}.`;
     $('#scheduledTitle').value=''; $('#scheduledFile').value=''; $('#scheduledWhen').value='';
     defaultScheduledTime();
     await loadScheduled();
